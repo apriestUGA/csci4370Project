@@ -10,6 +10,8 @@ import java.util.*;
 import java.util.function.*;
 import java.util.stream.*;
 
+import javax.swing.event.ListSelectionEvent;
+
 import static java.lang.Boolean.*;
 import static java.lang.System.out;
 
@@ -136,22 +138,28 @@ public class Table
     {
         out.println ("RA> " + name + ".project (" + attributes + ")");
         String [] attrs     = attributes.split (" ");
+        return this.project(attrs);
+    } // project
+    
+    public Table project (String [] attrs)
+    {
         Class []  colDomain = extractDom (match (attrs), domain);
-        String [] newKey    = (Arrays.asList (attrs).containsAll (Arrays.asList (key))) ? key : attrs;
+        String [] newKey    =  (Arrays.asList (attrs).containsAll (Arrays.asList (key))) ? key : attrs;
 
         List <Comparable []> rows = new ArrayList <> ();
         for (Comparable [] tuple : tuples) {
         	Comparable [] row = new Comparable [attrs.length];
-        	List <Comparable> rowList = new ArrayList <> ();
-        	for (int i = 0; i < attrs.length; i++) {
-        		if (Arrays.asList(attribute).contains(attrs[i])) { // if the table has this requested attr
-        			rowList.add(tuple[i]);
+        	ArrayList <Comparable> rowList = new ArrayList <> (attrs.length);
+        	for (int i = 0; i < attrs.length; i++) rowList.add(null);
+        	for (int i = 0; i < attribute.length; i++) {
+        		if (Arrays.asList(attrs).contains(attribute[i])) { // if the table has this requested attr
+        			rowList.set(Arrays.asList(attrs).indexOf(attribute[i]), tuple[i]); // TODO: null issue possible
         		}
         	}
         	rows.add(rowList.toArray(row)); // Adds row as an array to rows
         }
         
-        //  T O   B E   I M P L E M E N T E D
+        //   I M P L E M E N T E D.
 
         return new Table (name + count++, attrs, colDomain, newKey, rows);
     } // project
@@ -183,14 +191,20 @@ public class Table
     public Table select (KeyType keyVal)
     {
         out.println ("RA> " + name + ".select (" + keyVal + ")");
-
-        List <Comparable []> rows = new ArrayList <> ();
+        return hElPeRsElEcT(keyVal);
         
-        //  T O   B E   I M P L E M E N T E D 
-
-        return new Table (name + count++, attribute, domain, key, rows);
     } // select
 
+    public Table hElPeRsElEcT (KeyType keyVal) {
+        List <Comparable []> rows = new ArrayList <> ();
+        Comparable [] r = index.get(keyVal);
+        if (r != null)
+        	rows.add(r);
+        // I M P L E M E N T E D. 
+
+        return new Table (name + count++, attribute, domain, key, rows);
+    }
+    
     /************************************************************************************
      * Union this table and table2.  Check that the two tables are compatible.
      *
@@ -252,6 +266,7 @@ public class Table
      * @param table2      the rhs table in the join operation
      * @return  a table with tuples satisfying the equality predicate
      */
+    
     public Table join (String attributes1, String attributes2, Table table2)
     {
         out.println ("RA> " + name + ".join (" + attributes1 + ", " + attributes2 + ", "
@@ -260,9 +275,29 @@ public class Table
         String [] t_attrs = attributes1.split (" ");
         String [] u_attrs = attributes2.split (" ");
 
-        List <Comparable []> rows = new ArrayList <> ();
-
         //  T O   B E   I M P L E M E N T E D 
+        Table sTable = table2;
+        Table temp = table2;
+        List <Comparable []> rows = new ArrayList <> ();
+        //  T O   B E   I M P L E M E N T E D 
+        Table fKTable = this.project(t_attrs);	// Foreign key of this.table
+        for (int i = 0; i < tuples.size(); i++) {
+        	// Select the tuples from table2 that match primary key
+        	sTable = temp.hElPeRsElEcT(new KeyType(fKTable.tuples.get(i)));
+        	List <String> attrList = new ArrayList(Arrays.asList(sTable.attribute));
+        	// Removing primary keys from table2 selection
+        	for (String attrName : this.attribute) { // rename attribute
+        		if (attrList.indexOf(attrName) >= 0)
+        			sTable.attribute[attrList.indexOf(attrName)] = attrName + "2";
+        	}
+        	
+        	//String[] newArr = attrList.toArray(new String[0]);
+        	//sTable = sTable.project(newArr); // An sTable projection without primary keys
+        	
+        	for (Comparable[] tuple : sTable.tuples) {
+        		rows.add(ArrayUtil.concat(this.tuples.get(i), tuple));
+        	}
+        }
         
         return new Table (name + count++, ArrayUtil.concat (attribute, table2.attribute),
                                           ArrayUtil.concat (domain, table2.domain), key, rows);
@@ -281,14 +316,30 @@ public class Table
     public Table join (Table table2)
     {
         out.println ("RA> " + name + ".join (" + table2.name + ")");
-
+        Table sTable = table2;
         List <Comparable []> rows = new ArrayList <> ();
-
-        //  T O   B E   I M P L E M E N T E D 
-
+        //  I M P L E M E N T E D . 
+        Table pKTable = this.project(key);	// Primary keys of this.table
+        for (int i = 0; i < tuples.size(); i++) {
+        	// Select the tuples from table2 that match primary key
+        	sTable = table2.hElPeRsElEcT(new KeyType(pKTable.tuples.get(i)));
+        	List <String> attrList = new ArrayList(Arrays.asList(sTable.attribute));
+        	// Removing primary keys from table2 selection
+        	for (String attrName : this.attribute) {
+        		attrList.remove(attrName);
+        	}
+        	
+        	String[] newArr = attrList.toArray(new String[0]);
+        	sTable = sTable.project(newArr); // An sTable projection without primary keys
+        	
+        	for (Comparable[] tuple : sTable.tuples) {
+        		rows.add(ArrayUtil.concat(this.tuples.get(i), tuple));
+        	}
+        }
+        
         // FIX - eliminate duplicate columns
-        return new Table (name + count++, ArrayUtil.concat (attribute, table2.attribute),
-                                          ArrayUtil.concat (domain, table2.domain), key, rows);
+        return new Table (name + count++, ArrayUtil.concat (attribute, sTable.attribute),
+                                          ArrayUtil.concat (domain, sTable.domain), key, rows);
     } // join
 
     /************************************************************************************
@@ -492,8 +543,17 @@ public class Table
      */
     private boolean typeCheck (Comparable [] t)
     { 
-        //  T O   B E   I M P L E M E N T E D 
-
+        //  I M P L E M E N T E D ? 
+        if (domain.length != t.length) {
+            out.println ("compatible ERROR: table have different arity");
+            return false;
+        } // if
+        for (int j = 0; j < domain.length; j++) {
+            if (this.domain [j] != t[j].getClass()) {
+                out.println ("compatible ERROR: tables disagree on domain " + j);
+                return false;
+            } // if
+        } // for
         return true;
     } // typeCheck
 
